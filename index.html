@@ -15,7 +15,7 @@
     <h1>Attendance Database</h1>
     <h3 id="date"></h3>
     <p>Total Students: <span id="total"></span> | Present: <span id="presentCount"></span> | Absent: <span id="absentCount"></span></p>
-    
+
     <table id="attendanceTable">
         <thead>
             <tr>
@@ -47,76 +47,73 @@
         firebase.initializeApp(firebaseConfig);
         const db = firebase.database();
 
-        // Master list of all students
-        const allStudents = [
-            "Priyanshu", "Deep", "Udhay",
-            "Abheek", "Chubay", "Snigdha",
-            "Prapti","Tejashvi",
-        ];
-
         const dateEl = document.getElementById("date");
         const tbody = document.querySelector("#attendanceTable tbody");
         const totalEl = document.getElementById("total");
         const presentEl = document.getElementById("presentCount");
         const absentEl = document.getElementById("absentCount");
 
-        // Get latest attendance folder automatically
-        db.ref("attendance").once("value").then(snapshot => {
-            const dates = snapshot.exists() ? Object.keys(snapshot.val()) : [];
-            if (dates.length === 0) {
-                dateEl.innerText = "No attendance data available";
+        // Load student list first
+        db.ref("students").once("value").then(studentSnap => {
+            if (!studentSnap.exists()) {
+                alert("No student list found in Firebase under 'students'");
                 return;
             }
-            const latestDate = dates.sort().reverse()[0]; // latest date
-            dateEl.innerText = "Date: " + latestDate;
 
-            const ref = db.ref("attendance/" + latestDate);
-            ref.on("value", snap => {
-                const data = snap.val();
-                tbody.innerHTML = "";
-                let present = [];
+            const allStudents = Object.values(studentSnap.val()); // student names
 
-                if (data) {
-                    Object.keys(data).forEach((key, index) => {
-                        const row = data[key];
-                        const name = row.Name || row.name || "Unknown";
-                        const status = row.Status || row.status || "Present";
-                        const time = row.Time || row.time || "-";
-                        present.push(name.toLowerCase());
+            // Get latest attendance folder
+            db.ref("attendance").once("value").then(snapshot => {
+                const dates = snapshot.exists() ? Object.keys(snapshot.val()) : [];
+                if (dates.length === 0) {
+                    dateEl.innerText = "No attendance data available";
+                    return;
+                }
+                const latestDate = dates.sort().reverse()[0]; // latest date
+                dateEl.innerText = "Date: " + latestDate;
 
+                const ref = db.ref("attendance/" + latestDate);
+                ref.on("value", snap => {
+                    const data = snap.val();
+                    tbody.innerHTML = "";
+                    let present = [];
+
+                    if (data) {
+                        Object.keys(data).forEach((key, index) => {
+                            const row = data[key];
+                            const name = row.Name || row.name || "Unknown";
+                            const status = row.Status || row.status || "Present";
+                            const time = row.Time || row.time || "-";
+                            present.push(name.toLowerCase());
+
+                            const tr = document.createElement("tr");
+                            tr.innerHTML = `<td>${index + 1}</td>
+                                            <td>${name}</td>
+                                            <td>${status}</td>
+                                            <td>${time}</td>`;
+                            tbody.appendChild(tr);
+                        });
+                    }
+
+                    // Add absent students
+                    const absent = allStudents.filter(s => !present.includes(s.toLowerCase()));
+                    absent.forEach((name, idx) => {
                         const tr = document.createElement("tr");
-                        tr.innerHTML = `<td>${index + 1}</td>
+                        tr.classList.add("absent");
+                        tr.innerHTML = `<td>${present.length + idx + 1}</td>
                                         <td>${name}</td>
-                                        <td>${status}</td>
-                                        <td>${time}</td>`;
+                                        <td>Absent</td>
+                                        <td>-</td>`;
                         tbody.appendChild(tr);
                     });
-                }
 
-                // Add absent students
-                const absent = allStudents.filter(s => !present.includes(s.toLowerCase()));
-                absent.forEach((name, idx) => {
-                    const tr = document.createElement("tr");
-                    tr.classList.add("absent");
-                    tr.innerHTML = `<td>${present.length + idx + 1}</td>
-                                    <td>${name}</td>
-                                    <td>Absent</td>
-                                    <td>-</td>`;
-                    tbody.appendChild(tr);
+                    // Update counts
+                    totalEl.innerText = allStudents.length;
+                    presentEl.innerText = present.length;
+                    absentEl.innerText = absent.length;
                 });
-
-                // Update counts
-                totalEl.innerText = allStudents.length;
-                presentEl.innerText = present.length;
-                absentEl.innerText = absent.length;
             });
         });
     </script>
 </body>
 </html>
-
-
-
-
-
-
