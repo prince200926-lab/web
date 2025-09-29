@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Attendance Database</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 40px; }
+        table { border-collapse: collapse; width: 80%; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: center; }
+        th { background-color: #16a085; color: white; }
+        tr:nth-child(even) { background-color: #f2f2f2; }
+        .absent { background-color: #f99; }
+        select { padding: 5px; font-size: 16px; margin-bottom: 20px; }
+    </style>
+</head>
+<body>
+    <h1>Attendance Database</h1>
+    <label for="sectionSelect">Select Section:</label>
+    <select id="sectionSelect">
+        <option value="">--Loading Sections--</option>
+    </select>
+    <h3 id="date"></h3>
+    <p>Total Students: <span id="total"></span> | Present: <span id="presentCount"></span> | Absent: <span id="absentCount"></span></p>
+
+    <table id="attendanceTable">
+        <thead>
+            <tr>
+                <th>#</th>
+                <th>Name</th>
+                <th>Status</th>
+                <th>Time</th>
+            </tr>
+        </thead>
+        <tbody></tbody>
+    </table>
+
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyBFLpGMhcUe3vICo_m-eyzzJkonYdQOm8E",
+            authDomain: "capstone-b37ca.firebaseapp.com",
+            databaseURL: "https://capstone-b37ca-default-rtdb.asia-southeast1.firebasedatabase.app",
+            projectId: "capstone-b37ca",
+            storageBucket: "capstone-b37ca.appspot.com",
+            messagingSenderId: "759907486939",
+            appId: "1:759907486939:web:3152ad5a0e501d452790fe"
+        };
+
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+
+        const sectionSelect = document.getElementById("sectionSelect");
+        const dateEl = document.getElementById("date");
+        const tbody = document.querySelector("#attendanceTable tbody");
+        const totalEl = document.getElementById("total");
+        const presentEl = document.getElementById("presentCount");
+        const absentEl = document.getElementById("absentCount");
+
+        // Load sections from Firebase
+        db.ref("students").once("value").then(snapshot => {
+            if (!snapshot.exists()) {
+                alert("No sections found under 'students'");
+                return;
+            }
+
+            const sections = Object.keys(snapshot.val());
+            sectionSelect.innerHTML = "<option value=''>--Select Section--</option>";
+            sections.forEach(sec => {
+                const opt = document.createElement("option");
+                opt.value = sec;
+                opt.innerText = sec;
+                sectionSelect.appendChild(opt);
+            });
+        });
+
+        sectionSelect.addEventListener("change", () => {
+            const section = sectionSelect.value;
+            if (!section) return;
+
+            // Get latest attendance
+            db.ref("attendance").once("value").then(snapshot => {
+                const dates = snapshot.exists() ? Object.keys(snapshot.val()) : [];
+                if (dates.length === 0) {
+                    dateEl.innerText = "No attendance data available";
+                    tbody.innerHTML = "";
+                    return;
+                }
+
+                const latestDate = dates.sort().reverse()[0];
+                dateEl.innerText = "Date: " + latestDate;
+
+                // Get student list for selected section
+                db.ref("students/" + section).once("value").then(studentSnap => {
+                    const allStudents = studentSnap.exists() ? Object.values(studentSnap.val()) : [];
+
+                    // Get attendance data for this section
+                    const sectionAttendance = snapshot.val()[latestDate]?.[section] || {};
+                    tbody.innerHTML = "";
+                    let present = [];
+
+                    allStudents.forEach((name, index) => {
+                        const att = sectionAttendance[name] || {};
+                        const status = att.Status || "Absent";
+                        const time = att.Time || "-";
+
+                        if (status.toLowerCase() === "present") present.push(name.toLowerCase());
+
+                        const tr = document.createElement("tr");
+                        tr.classList.toggle("absent", status.toLowerCase() === "absent");
+                        tr.innerHTML = `<td>${index + 1}</td>
+                                        <td>${name}</td>
+                                        <td>${status}</td>
+                                        <td>${time}</td>`;
+                        tbody.appendChild(tr);
+                    });
+
+                    totalEl.innerText = allStudents.length;
+                    presentEl.innerText = present.length;
+                    absentEl.innerText = allStudents.length - present.length;
+                });
+            });
+        });
+    </script>
+</body>
+</html>
