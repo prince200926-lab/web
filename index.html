@@ -19,7 +19,7 @@
         <option value="">--Loading Sections--</option>
     </select>
     <h3 id="date"></h3>
-    <p>Total Students: <span id="total"></span> | Present: <span id="presentCount"></span> | Absent: <span id="absentCount"></span></p>
+    <p>Total Students: <span id="total">0</span> | Present: <span id="presentCount">0</span> | Absent: <span id="absentCount">0</span></p>
 
     <table id="attendanceTable">
         <thead>
@@ -57,7 +57,12 @@
         const presentEl = document.getElementById("presentCount");
         const absentEl = document.getElementById("absentCount");
 
-        // Load sections from Firebase
+        // Utility function to normalize names
+        function normalize(str) {
+            return str.replace(/\s+/g, '').toLowerCase();
+        }
+
+        // Load sections from 'students'
         db.ref("students").once("value").then(snapshot => {
             if (!snapshot.exists()) {
                 alert("No sections found under 'students'");
@@ -78,33 +83,48 @@
             const section = sectionSelect.value;
             if (!section) return;
 
-            // Get latest attendance
-            db.ref("attendance").once("value").then(snapshot => {
-                const dates = snapshot.exists() ? Object.keys(snapshot.val()) : [];
-                if (dates.length === 0) {
-                    dateEl.innerText = "No attendance data available";
+            // Get student list first
+            db.ref("students/" + section).once("value").then(studentSnap => {
+                if (!studentSnap.exists()) {
+                    dateEl.innerText = "No students in this section";
                     tbody.innerHTML = "";
+                    totalEl.innerText = 0;
+                    presentEl.innerText = 0;
+                    absentEl.innerText = 0;
                     return;
                 }
 
-                const latestDate = dates.sort().reverse()[0];
-                dateEl.innerText = "Date: " + latestDate;
+                const allStudents = Object.values(studentSnap.val());
+                totalEl.innerText = allStudents.length;
 
-                // Get student list for selected section
-                db.ref("students/" + section).once("value").then(studentSnap => {
-                    const allStudents = studentSnap.exists() ? Object.values(studentSnap.val()) : [];
+                // Get attendance for this section
+                db.ref("attendance/" + section).once("value").then(attSnap => {
+                    let latestDate = null;
+                    let sectionAttendance = {};
 
-                    // Get attendance data for this section
-                    const sectionAttendance = snapshot.val()[latestDate]?.[section] || {};
+                    if (attSnap.exists()) {
+                        const dates = Object.keys(attSnap.val());
+                        latestDate = dates.sort().reverse()[0];
+                        sectionAttendance = attSnap.val()[latestDate];
+                    }
+
+                    dateEl.innerText = latestDate ? "Date: " + latestDate : "No attendance yet";
+
                     tbody.innerHTML = "";
-                    let present = [];
+                    let presentCount = 0;
 
                     allStudents.forEach((name, index) => {
-                        const att = sectionAttendance[name] || {};
-                        const status = att.Status || "Absent";
-                        const time = att.Time || "-";
+                        let att = null;
+                        if (sectionAttendance) {
+                            // Normalize both student names and attendance keys
+                            const attKey = Object.keys(sectionAttendance).find(k => normalize(k) === normalize(name));
+                            if (attKey) att = sectionAttendance[attKey];
+                        }
 
-                        if (status.toLowerCase() === "present") present.push(name.toLowerCase());
+                        const status = att ? (att.Status || "Present") : "Absent";
+                        const time = att ? (att.Time || "-") : "-";
+
+                        if (status.toLowerCase() === "present") presentCount++;
 
                         const tr = document.createElement("tr");
                         tr.classList.toggle("absent", status.toLowerCase() === "absent");
@@ -115,9 +135,8 @@
                         tbody.appendChild(tr);
                     });
 
-                    totalEl.innerText = allStudents.length;
-                    presentEl.innerText = present.length;
-                    absentEl.innerText = allStudents.length - present.length;
+                    presentEl.innerText = presentCount;
+                    absentEl.innerText = allStudents.length - presentCount;
                 });
             });
         });
